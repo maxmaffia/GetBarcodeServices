@@ -1,0 +1,4 @@
+# Nega l'accesso diretto a config.php dal browser
+<Files "config.php">
+    Require all denied
+</Files>
