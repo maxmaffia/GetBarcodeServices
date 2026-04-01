@@ -59,7 +59,7 @@ try {
         PDO::ATTR_EMULATE_PREPARES   => false,
     ]);
 
-    $stmt = $pdo->prepare('SELECT `server` FROM `aziende` WHERE `id_azienda` = :id_azienda LIMIT 1');
+    $stmt = $pdo->prepare('SELECT `server`, `porta` FROM `aziende` WHERE `id_azienda` = :id_azienda LIMIT 1');
     $stmt->execute([':id_azienda' => $idAzienda]);
     $row = $stmt->fetch();
 
@@ -73,6 +73,7 @@ try {
         'result'     => true,
         'id_azienda' => $idAzienda,
         'server'     => (string) $row['server'],
+        'porta'      => (int) $row['porta'],
     ]);
 
 } catch (PDOException $e) {

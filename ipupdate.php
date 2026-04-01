@@ -35,6 +35,7 @@ $payload = [
     'id_azienda' => IPUPDATE_ID_AZIENDA,
     'azienda'    => IPUPDATE_AZIENDA,
     'server'     => resolveLocalIp(),
+    'porta'      => (int) IPUPDATE_PORTA,
 ];
 
 $endpoint = 'https://www.godrop.me/services/';

@@ -37,11 +37,12 @@ if (!is_array($input)) {
 $id_azienda = isset($input['id_azienda']) ? (int) $input['id_azienda'] : null;
 $azienda    = isset($input['azienda'])    ? trim((string) $input['azienda']) : null;
 $server     = isset($input['server'])     ? trim((string) $input['server'])  : null;
+$porta      = isset($input['porta'])      ? (int) $input['porta'] : null;
 
 if (empty($id_azienda) || $id_azienda <= 0 || $azienda === '' || $azienda === null
-    || $server === '' || $server === null) {
+    || $server === '' || $server === null || empty($porta) || $porta <= 0 || $porta > 65535) {
     http_response_code(400);
-    echo json_encode(['result' => false, 'error' => 'Missing or invalid fields: id_azienda, azienda, server']);
+    echo json_encode(['result' => false, 'error' => 'Missing or invalid fields: id_azienda, azienda, server, porta']);
     exit;
 }
 
@@ -61,11 +62,12 @@ try {
 
     // UPSERT: se id_azienda esiste aggiorna, altrimenti inserisce
     $sql = "
-        INSERT INTO `aziende` (`id_azienda`, `azienda`, `server`)
-        VALUES (:id_azienda, :azienda, :server)
+        INSERT INTO `aziende` (`id_azienda`, `azienda`, `server`, `porta`)
+        VALUES (:id_azienda, :azienda, :server, :porta)
         ON DUPLICATE KEY UPDATE
             `azienda` = VALUES(`azienda`),
             `server`  = VALUES(`server`),
+            `porta`   = VALUES(`porta`),
             `updated_at` = NOW()
     ";
 
@@ -74,6 +76,7 @@ try {
         ':id_azienda' => $id_azienda,
         ':azienda'    => $azienda,
         ':server'     => $server,
+        ':porta'      => $porta,
     ]);
 
     echo json_encode(['result' => true]);
