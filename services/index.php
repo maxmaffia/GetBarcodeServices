@@ -3,6 +3,19 @@ require_once __DIR__ . '/config.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
+$apiKeyFromHeader = $_SERVER['HTTP_X_API_KEY'] ?? '';
+if ($apiKeyFromHeader === '' && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    if (preg_match('/^Bearer\s+(.+)$/i', (string) $_SERVER['HTTP_AUTHORIZATION'], $matches)) {
+        $apiKeyFromHeader = trim($matches[1]);
+    }
+}
+
+if ($apiKeyFromHeader !== SERVICES_API_KEY) {
+    http_response_code(401);
+    echo json_encode(['result' => false, 'error' => 'Unauthorized']);
+    exit;
+}
+
 // Accetta solo richieste POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

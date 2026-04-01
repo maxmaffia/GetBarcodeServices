@@ -60,6 +60,7 @@ if (function_exists('curl_init')) {
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
+            'X-API-Key: ' . IPUPDATE_API_KEY,
             'Content-Length: ' . strlen($jsonBody),
         ],
         CURLOPT_POSTFIELDS     => $jsonBody,
@@ -83,6 +84,7 @@ if (function_exists('curl_init')) {
         'http' => [
             'method'  => 'POST',
             'header'  => "Content-Type: application/json\r\n"
+                       . 'X-API-Key: ' . IPUPDATE_API_KEY . "\r\n"
                        . 'Content-Length: ' . strlen($jsonBody) . "\r\n",
             'content' => $jsonBody,
             'timeout' => 15,
