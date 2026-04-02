@@ -327,8 +327,13 @@ $defaultIp = $localIPs[0] ?? '';
         </div>
 
         <!-- ── Footer ── -->
-        <div class="bg-light text-center py-2 px-3 border-top">
-            <small class="text-muted">
+        <div class="bg-light text-center py-3 px-3 border-top">
+            <div class="mb-2">
+                <a href="admin.html" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-house me-1"></i>Torna al pannello principale
+                </a>
+            </div>
+            <small class="text-muted d-block">
                 <i class="bi bi-shield-lock-fill text-success me-1"></i>
                 <code class="text-primary small">https://www.godrop.me/services/</code>
             </small>
