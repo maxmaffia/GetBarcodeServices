@@ -5,6 +5,7 @@ declare(strict_types=1);
 require __DIR__ . '/gshop/src/bootstrap.php';
 
 use GShop\Database\SqlServerConnection;
+use GShop\Service\PalmariExportService;
 
 $config = require __DIR__ . '/gshop/config.php';
 $sqlConfig = $config['sqlserver'] ?? [];
@@ -27,12 +28,13 @@ $filters = [
 if ($filters['limit'] < 1) {
     $filters['limit'] = 200;
 }
-if ($filters['limit'] > 5000) {
-    $filters['limit'] = 5000;
+if ($filters['limit'] > 999999) {
+    $filters['limit'] = 999999;
 }
 
 $doExport = isset($_GET['export']) && (string) $_GET['export'] === '1';
 $error = null;
+$profileInfo = null;
 $rows = [];
 
 $options = [
@@ -201,6 +203,24 @@ try {
     $options['reparti'] = loadOptions($pdo, 'reparti', 'RepCode', 'RepDescr');
     $options['fornitori'] = loadOptions($pdo, 'fornitori', 'ForCode', 'ForDescr');
 
+    if (hasSubmittedFilters($_GET)) {
+        $profileFilters = $filters;
+        unset($profileFilters['limit']);
+
+        $masterdataService = new PalmariExportService(
+            (string) ($config['export']['base_dir'] ?? (__DIR__ . '/gshop/exports')),
+            $config['export']['masterdata_dir'] ?? null,
+            (string) ($config['export']['masterdata_filename'] ?? 'masterdata.csv')
+        );
+
+        $savedProfile = $masterdataService->saveMasterdataProfile($profileFilters, (int) $filters['limit']);
+        $profileInfo = [
+            'ok' => true,
+            'filters' => $savedProfile['filters'] ?? [],
+            'limit' => (int) ($savedProfile['limit'] ?? (int) $filters['limit']),
+        ];
+    }
+
     $rows = fetchModelli($pdo, $filters, $doExport);
 
     if ($doExport) {
@@ -243,6 +263,22 @@ function selected(string $value, string $current): string
 {
     return $value === $current ? 'selected' : '';
 }
+
+function hasSubmittedFilters(array $query): bool
+{
+    $keys = [
+        'modarticolo', 'moddescr', 'modstag', 'modnumer', 'modmar',
+        'modcat', 'modaltezza', 'moddis', 'modpel', 'modpro', 'modforn', 'limit'
+    ];
+
+    foreach ($keys as $key) {
+        if (array_key_exists($key, $query)) {
+            return true;
+        }
+    }
+
+    return false;
+}
 ?>
 <!DOCTYPE html>
 <html lang="it">
@@ -276,6 +312,12 @@ function selected(string $value, string $current): string
         </div>
     <?php endif; ?>
 
+    <?php if ($profileInfo !== null && $error === null): ?>
+        <div class="alert alert-info py-2">
+            Profilo filtri masterdata aggiornato automaticamente (limit: <?= (int) $profileInfo['limit'] ?>).
+        </div>
+    <?php endif; ?>
+
     <form method="get" class="card shadow-sm mb-4">
         <div class="card-body">
             <div class="row g-3">
@@ -289,7 +331,7 @@ function selected(string $value, string $current): string
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Limite righe</label>
-                    <input type="number" min="1" max="5000" name="limit" class="form-control" value="<?= (int) $filters['limit'] ?>">
+                    <input type="number" min="1" max="999999" name="limit" class="form-control" value="<?= (int) $filters['limit'] ?>">
                 </div>
 
                 <div class="col-md-2">

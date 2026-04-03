@@ -249,6 +249,10 @@ Esempi Postman pronti
 - Header:
   Content-Type: application/json
   X-Api-Key: _9C_8gpMEkVPE7Cx-TGC5EiSNsObLPakcMghtOuvWkq5EHs3Xf3Vat9x-lRgoA-J
+- Nota:
+  Se filters e vuoto (o assente), il servizio usa i filtri salvati nel profilo masterdata.
+  L'export genera piu file: masterdata_1.csv ... masterdata_N.csv (split ogni X record).
+  Prima di generare, i chunk masterdata gia presenti vengono cancellati.
 - Body raw JSON:
 {
   "filters": {
@@ -258,10 +262,34 @@ Esempi Postman pronti
   "limit": 999999
 }
 
-26. Download masterdata.csv o masterdata.json
+26. Salva profilo filtri masterdata
+- Metodo: POST
+- URL: http://localhost:8080/gshop/api/palmari/masterdata/profile
+- Header:
+  Content-Type: application/json
+  X-Api-Key: _9C_8gpMEkVPE7Cx-TGC5EiSNsObLPakcMghtOuvWkq5EHs3Xf3Vat9x-lRgoA-J
+- Body raw JSON:
+{
+  "filters": {
+    "modcat": "003",
+    "modstag": "E19",
+    "modforn": "001"
+  },
+  "limit": 999999
+}
+
+27. Leggi profilo filtri masterdata
 - Metodo: GET
-- URL CSV: http://localhost:8080/gshop/api/palmari/masterdata/file?format=csv
-- URL JSON: http://localhost:8080/gshop/api/palmari/masterdata/file?format=json
-- Default senza parametro: CSV
+- URL: http://localhost:8080/gshop/api/palmari/masterdata/profile
+- Header:
+  X-Api-Key: _9C_8gpMEkVPE7Cx-TGC5EiSNsObLPakcMghtOuvWkq5EHs3Xf3Vat9x-lRgoA-J
+
+28. Download file masterdata (csv/json)
+- Metodo: GET
+- URL CSV primo file disponibile: http://localhost:8080/gshop/api/palmari/masterdata/file?format=csv
+- URL CSV per numero file: http://localhost:8080/gshop/api/palmari/masterdata/file?part=1&format=csv
+- URL JSON per numero file: http://localhost:8080/gshop/api/palmari/masterdata/file?part=1&format=json
+- Default senza parametro part: primo file disponibile
+- Compat legacy supportata: ?file=masterdata_1.csv
 - Header:
   X-Api-Key: _9C_8gpMEkVPE7Cx-TGC5EiSNsObLPakcMghtOuvWkq5EHs3Xf3Vat9x-lRgoA-J

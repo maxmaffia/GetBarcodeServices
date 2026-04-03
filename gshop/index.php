@@ -24,7 +24,10 @@ $exportService = new ExportService($exportBaseDir);
 $palmariExportService = new PalmariExportService(
     $exportBaseDir,
     $config['export']['masterdata_dir'] ?? null,
-    (string) ($config['export']['masterdata_filename'] ?? 'masterdata.csv')
+    (string) ($config['export']['masterdata_filename'] ?? 'masterdata.csv'),
+    (int) ($config['export']['taglia_chars'] ?? 3),
+    (int) ($config['export']['max_taglie_fallback'] ?? 60),
+    (int) ($config['export']['masterdata_chunk_size'] ?? 50000)
 );
 
 $healthController = new HealthController($db);
@@ -106,6 +109,32 @@ $router->add('POST', '/gshop/api/palmari/masterdata/refresh', function (Request 
     try {
         $controller = new PalmariExportController($palmariExportService, $db->pdo());
         $controller->refreshMasterdata($request);
+    } catch (\Throwable $e) {
+        Response::json(['error' => 'Errore connessione database', 'details' => $e->getMessage()], 500);
+    }
+});
+
+$router->add('POST', '/gshop/api/palmari/masterdata/profile', function (Request $request) use ($db, $palmariExportService, $config): void {
+    if (!authorize($request, $config)) {
+        return;
+    }
+    try {
+        $db->pdo();
+        $controller = new PalmariExportController($palmariExportService, $db->pdo());
+        $controller->saveMasterdataProfile($request);
+    } catch (\Throwable $e) {
+        Response::json(['error' => 'Errore connessione database', 'details' => $e->getMessage()], 500);
+    }
+});
+
+$router->add('GET', '/gshop/api/palmari/masterdata/profile', function (Request $request) use ($db, $palmariExportService, $config): void {
+    if (!authorize($request, $config)) {
+        return;
+    }
+    try {
+        $db->pdo();
+        $controller = new PalmariExportController($palmariExportService, $db->pdo());
+        $controller->getMasterdataProfile();
     } catch (\Throwable $e) {
         Response::json(['error' => 'Errore connessione database', 'details' => $e->getMessage()], 500);
     }

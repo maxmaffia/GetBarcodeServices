@@ -19,5 +19,11 @@ return [
         // Cartella e nome file usati dal servizio schedulato masterdata.
         'masterdata_dir' => __DIR__ . DIRECTORY_SEPARATOR . 'exports' . DIRECTORY_SEPARATOR . 'scheduled',
         'masterdata_filename' => 'masterdata.csv',
+        // Numero di caratteri che rappresentano una taglia in NumTaglie (es. 3 => "38 ", "39 ").
+        'taglia_chars' => 3,
+        // Fallback se ParametriNegozio.GESTIONETAGLIE non e valorizzato/valido.
+        'max_taglie_fallback' => 30,
+        // Numero massimo di record per ciascun file masterdata_N.csv.
+        'masterdata_chunk_size' => 1000,
     ],
 ];

@@ -68,28 +68,113 @@ class PalmariExportController
         }
 
         $filters = isset($body['filters']) && is_array($body['filters']) ? $body['filters'] : [];
-        $limit = (int) ($body['limit'] ?? 999999);
+        $hasLimit = array_key_exists('limit', $body);
+        $limit = $hasLimit ? (int) $body['limit'] : 999999;
+        $filtersSource = 'request';
+        $profileSaved = false;
+
+        if ($this->isEmptyFiltersPayload($filters)) {
+            $profile = $this->service->getMasterdataProfile();
+            $filters = $profile['filters'];
+            if (!$hasLimit) {
+                $limit = (int) $profile['limit'];
+            }
+            $filtersSource = (string) ($profile['source'] ?? 'default');
+        } else {
+            try {
+                $this->service->saveMasterdataProfile($filters, $limit);
+                $profileSaved = true;
+            } catch (\Throwable $e) {
+                Response::json(['error' => 'Errore salvataggio profilo filtri', 'details' => $e->getMessage()], 500);
+                return;
+            }
+        }
+
+        $limit = $this->service->normalizeMasterdataLimit($limit);
 
         try {
             $result = $this->service->refreshMasterdata($this->pdo, $filters, $limit);
+            $files = isset($result['files']) && is_array($result['files']) ? $result['files'] : [];
+            $filesForResponse = [];
+            foreach ($files as $fileMeta) {
+                $fileName = (string) ($fileMeta['file'] ?? '');
+                if ($fileName === '') {
+                    continue;
+                }
+                $index = (int) ($fileMeta['index'] ?? 0);
+                $filesForResponse[] = [
+                    'file' => $fileName,
+                    'rows' => (int) ($fileMeta['rows'] ?? 0),
+                    'index' => $index,
+                    'download_url' => '/gshop/api/palmari/masterdata/file?part=' . $index,
+                ];
+            }
+
             Response::json([
                 'status' => 'ok',
-                'message' => 'masterdata.csv aggiornato',
+                'message' => 'File masterdata aggiornati',
                 'rows' => $result['rows'],
-                'file' => $result['filename'],
+                'files_count' => (int) ($result['files_count'] ?? count($filesForResponse)),
+                'files' => $filesForResponse,
                 'download_url' => '/gshop/api/palmari/masterdata/file',
                 'filters' => $result['filters'],
+                'filters_source' => $filtersSource,
+                'profile_saved' => $profileSaved,
             ]);
         } catch (\Throwable $e) {
             Response::json(['error' => 'Errore refresh masterdata', 'details' => $e->getMessage()], 500);
         }
     }
 
+    public function saveMasterdataProfile(Request $request): void
+    {
+        $body = $request->jsonBody();
+        if ($body === null) {
+            Response::json(['error' => 'Body JSON non valido'], 400);
+            return;
+        }
+
+        $filters = isset($body['filters']) && is_array($body['filters']) ? $body['filters'] : [];
+        $limit = (int) ($body['limit'] ?? 999999);
+
+        try {
+            $profile = $this->service->saveMasterdataProfile($filters, $limit);
+            Response::json([
+                'status' => 'ok',
+                'message' => 'Profilo filtri masterdata salvato',
+                'profile' => $profile,
+            ]);
+        } catch (\Throwable $e) {
+            Response::json(['error' => 'Errore salvataggio profilo filtri', 'details' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getMasterdataProfile(): void
+    {
+        try {
+            $profile = $this->service->getMasterdataProfile();
+            Response::json([
+                'status' => 'ok',
+                'profile' => $profile,
+            ]);
+        } catch (\Throwable $e) {
+            Response::json(['error' => 'Errore lettura profilo filtri', 'details' => $e->getMessage()], 500);
+        }
+    }
+
     public function downloadMasterdata(Request $request): void
     {
-        $meta = $this->service->resolveMasterdataFile();
+        $part = (int) ($request->query()['part'] ?? 0);
+        if ($part > 0) {
+            $meta = $this->service->resolveMasterdataFileByIndex($part);
+        } else {
+            // Compat legacy: se arriva file=masterdata_X.csv lo supportiamo ancora.
+            $requestedFile = trim((string) ($request->query()['file'] ?? ''));
+            $meta = $this->service->resolveMasterdataFileByName($requestedFile !== '' ? $requestedFile : null);
+        }
+
         if ($meta === null) {
-            Response::json(['error' => 'masterdata.csv non trovato'], 404);
+            Response::json(['error' => 'File masterdata non trovato'], 404);
             return;
         }
 
@@ -158,5 +243,20 @@ class PalmariExportController
 
         echo ']';
         fclose($fp);
+    }
+
+    private function isEmptyFiltersPayload(array $filters): bool
+    {
+        if (empty($filters)) {
+            return true;
+        }
+
+        foreach ($filters as $value) {
+            if (trim((string) $value) !== '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
