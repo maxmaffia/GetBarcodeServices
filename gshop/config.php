@@ -1,5 +1,7 @@
 <?php
 return [
+    // Abilita il plugin GShop: menu e sezioni Gshop visibili solo se true.
+    'gshop_plugin' => true,
     'api_key' => '_9C_8gpMEkVPE7Cx-TGC5EiSNsObLPakcMghtOuvWkq5EHs3Xf3Vat9x-lRgoA-J',
     'sqlserver' => [
         'host' => 'localhost',

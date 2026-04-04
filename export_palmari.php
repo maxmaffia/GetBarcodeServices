@@ -22,19 +22,22 @@ $filters = [
     'modpel' => trim((string) ($_GET['modpel'] ?? '')),
     'modpro' => trim((string) ($_GET['modpro'] ?? '')),
     'modforn' => trim((string) ($_GET['modforn'] ?? '')),
-    'limit' => (int) ($_GET['limit'] ?? 200),
 ];
 
-if ($filters['limit'] < 1) {
-    $filters['limit'] = 200;
+$viewLimit = (int) ($_GET['limit'] ?? 200);
+if ($viewLimit < 1) {
+    $viewLimit = 200;
 }
-if ($filters['limit'] > 999999) {
-    $filters['limit'] = 999999;
+if ($viewLimit > 5000) {
+    $viewLimit = 5000;
 }
 
-$doExport = isset($_GET['export']) && (string) $_GET['export'] === '1';
+$generateMasterdata = isset($_GET['export']) && (string) $_GET['export'] === '1';
 $error = null;
 $profileInfo = null;
+$exportInfo = null;
+$totalRows = 0;
+$masterdataRows = 0;
 $rows = [];
 
 $options = [
@@ -97,7 +100,7 @@ function loadOptions(PDO $pdo, string $table, string $codeField, string $descrFi
     return $result;
 }
 
-function fetchModelli(PDO $pdo, array $filters, bool $forExport): array
+function fetchModelli(PDO $pdo, array $filters, int $viewLimit): array
 {
     $sql = "
         SELECT
@@ -169,9 +172,7 @@ function fetchModelli(PDO $pdo, array $filters, bool $forExport): array
 
     $sql .= ' ORDER BY m.ModArticolo ASC';
 
-    if (!$forExport) {
-        $sql .= ' OFFSET 0 ROWS FETCH NEXT :limit ROWS ONLY';
-    }
+    $sql .= ' OFFSET 0 ROWS FETCH NEXT :limit ROWS ONLY';
 
     $stmt = $pdo->prepare($sql);
 
@@ -179,14 +180,63 @@ function fetchModelli(PDO $pdo, array $filters, bool $forExport): array
         $stmt->bindValue($param, $value, PDO::PARAM_STR);
     }
 
-    if (!$forExport) {
-        $stmt->bindValue(':limit', (int) $filters['limit'], PDO::PARAM_INT);
-    }
+    $stmt->bindValue(':limit', $viewLimit, PDO::PARAM_INT);
 
     $stmt->execute();
 
     $data = $stmt->fetchAll() ?: [];
     return array_map('toUtf8Row', $data);
+}
+
+function countModelli(PDO $pdo, array $filters): int
+{
+    $sql = 'SELECT COUNT(*) FROM modelli m';
+
+    $where = [];
+    $params = [];
+
+    if ($filters['modarticolo'] !== '') {
+        $where[] = 'm.ModArticolo LIKE :modarticolo';
+        $params[':modarticolo'] = '%' . $filters['modarticolo'] . '%';
+    }
+    if ($filters['moddescr'] !== '') {
+        $where[] = 'm.ModDescr LIKE :moddescr';
+        $params[':moddescr'] = '%' . $filters['moddescr'] . '%';
+    }
+
+    $map = [
+        'modstag' => 'm.ModStag',
+        'modnumer' => 'm.ModNumer',
+        'modmar' => 'm.ModMar',
+        'modcat' => 'm.ModCat',
+        'modaltezza' => 'm.ModAltezza',
+        'moddis' => 'm.ModDis',
+        'modpel' => 'm.ModPel',
+        'modpro' => 'm.ModPro',
+        'modforn' => 'm.ModForn',
+    ];
+
+    foreach ($map as $key => $field) {
+        if (($filters[$key] ?? '') === '') {
+            continue;
+        }
+        $param = ':' . $key;
+        $where[] = $field . ' = ' . $param;
+        $params[$param] = $filters[$key];
+    }
+
+    if (!empty($where)) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
+    $stmt = $pdo->prepare($sql);
+    foreach ($params as $param => $value) {
+        $stmt->bindValue($param, $value, PDO::PARAM_STR);
+    }
+
+    $stmt->execute();
+
+    return (int) $stmt->fetchColumn();
 }
 
 try {
@@ -203,59 +253,35 @@ try {
     $options['reparti'] = loadOptions($pdo, 'reparti', 'RepCode', 'RepDescr');
     $options['fornitori'] = loadOptions($pdo, 'fornitori', 'ForCode', 'ForDescr');
 
-    if (hasSubmittedFilters($_GET)) {
-        $profileFilters = $filters;
-        unset($profileFilters['limit']);
+    $profileFilters = $filters;
+    $masterdataService = new PalmariExportService(
+        (string) ($config['export']['base_dir'] ?? (__DIR__ . '/gshop/exports')),
+        $config['export']['masterdata_dir'] ?? null,
+        (string) ($config['export']['masterdata_filename'] ?? 'masterdata.csv'),
+        (int) ($config['export']['taglia_chars'] ?? 3),
+        (int) ($config['export']['max_taglie_fallback'] ?? 30),
+        (int) ($config['export']['masterdata_chunk_size'] ?? 1000)
+    );
 
-        $masterdataService = new PalmariExportService(
-            (string) ($config['export']['base_dir'] ?? (__DIR__ . '/gshop/exports')),
-            $config['export']['masterdata_dir'] ?? null,
-            (string) ($config['export']['masterdata_filename'] ?? 'masterdata.csv')
-        );
-
-        $savedProfile = $masterdataService->saveMasterdataProfile($profileFilters, (int) $filters['limit']);
+    if (hasSubmittedFilterCriteria($_GET) || $generateMasterdata) {
+        $savedProfile = $masterdataService->saveMasterdataProfile($profileFilters, null);
         $profileInfo = [
             'ok' => true,
             'filters' => $savedProfile['filters'] ?? [],
-            'limit' => (int) ($savedProfile['limit'] ?? (int) $filters['limit']),
         ];
     }
 
-    $rows = fetchModelli($pdo, $filters, $doExport);
-
-    if ($doExport) {
-        $fileName = 'export_palmari_' . date('Ymd_His') . '.csv';
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $fileName . '"');
-
-        $out = fopen('php://output', 'wb');
-        fwrite($out, "\xEF\xBB\xBF");
-        fputcsv($out, ['Codice', 'Descrizione', 'PrezzoAcquisto', 'PrezzoVendita1', 'PrezzoVendita2', 'PrezzoVendita3', 'PrezzoVendita4', 'PrezzoVendita5', 'Stagione', 'Taglie', 'Brand', 'Categoria', 'Tipologia', 'Disciplina', 'Materiale', 'Reparto', 'Fornitore'], ';', '"', '\\');
-        foreach ($rows as $row) {
-            fputcsv($out, [
-                $row['Codice'] ?? '',
-                $row['Descrizione'] ?? '',
-            $row['PrezzoAcquisto'] ?? '',
-            $row['PrezzoVendita1'] ?? '',
-            $row['PrezzoVendita2'] ?? '',
-            $row['PrezzoVendita3'] ?? '',
-            $row['PrezzoVendita4'] ?? '',
-            $row['PrezzoVendita5'] ?? '',
-                $row['Stagione'] ?? '',
-                $row['Taglie'] ?? '',
-                $row['Brand'] ?? '',
-                $row['Categoria'] ?? '',
-                $row['Tipologia'] ?? '',
-                $row['Disciplina'] ?? '',
-                $row['Materiale'] ?? '',
-                $row['Reparto'] ?? '',
-                $row['Fornitore'] ?? '',
-            ], ';', '"', '\\');
-        }
-        fclose($out);
-        exit;
+    if ($generateMasterdata) {
+        $exportInfo = $masterdataService->refreshMasterdata($pdo, $profileFilters, null);
     }
-} catch (Throwable $e) {
+
+    $rows = fetchModelli($pdo, $filters, $viewLimit);
+    $totalRows = countModelli($pdo, $filters);
+    $masterdataRows = $exportInfo !== null
+        ? (int) ($exportInfo['rows'] ?? 0)
+        : $masterdataService->estimateMasterdataRows($pdo, $profileFilters, null);
+}
+catch (Throwable $e) {
     $error = $e->getMessage();
 }
 
@@ -264,11 +290,11 @@ function selected(string $value, string $current): string
     return $value === $current ? 'selected' : '';
 }
 
-function hasSubmittedFilters(array $query): bool
+function hasSubmittedFilterCriteria(array $query): bool
 {
     $keys = [
         'modarticolo', 'moddescr', 'modstag', 'modnumer', 'modmar',
-        'modcat', 'modaltezza', 'moddis', 'modpel', 'modpro', 'modforn', 'limit'
+        'modcat', 'modaltezza', 'moddis', 'modpel', 'modpro', 'modforn'
     ];
 
     foreach ($keys as $key) {
@@ -286,7 +312,8 @@ function hasSubmittedFilters(array $query): bool
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Export per palmari</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" crossorigin="anonymous">
     <style>
         body { background: #f6f8fb; }
         .page-title { font-weight: 700; }
@@ -294,16 +321,11 @@ function hasSubmittedFilters(array $query): bool
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="admin.html">GetBarcodes - Export per palmari</a>
-    </div>
-</nav>
+<?php $navActivePage = 'export-palmari'; include __DIR__ . '/_navbar.php'; ?>
 
 <main class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h3 page-title mb-0">Filtri modelli</h1>
-        <a href="admin.html" class="btn btn-outline-secondary">Torna ad Admin</a>
     </div>
 
     <?php if ($error !== null): ?>
@@ -314,7 +336,24 @@ function hasSubmittedFilters(array $query): bool
 
     <?php if ($profileInfo !== null && $error === null): ?>
         <div class="alert alert-info py-2">
-            Profilo filtri masterdata aggiornato automaticamente (limit: <?= (int) $profileInfo['limit'] ?>).
+            Profilo filtri masterdata aggiornato automaticamente con i filtri correnti.
+        </div>
+    <?php endif; ?>
+
+    <?php if ($exportInfo !== null && $error === null): ?>
+        <div class="alert alert-success">
+            Refresh masterdata eseguito: righe esportate <?= (int) ($exportInfo['rows'] ?? 0) ?>, file creati <?= (int) ($exportInfo['files_count'] ?? 0) ?>, chunk size <?= (int) ($config['export']['masterdata_chunk_size'] ?? 1000) ?>.
+            <?php if (!empty($exportInfo['files']) && is_array($exportInfo['files'])): ?>
+                <div class="mt-2 d-flex flex-wrap gap-2">
+                    <?php foreach ($exportInfo['files'] as $fileMeta): ?>
+                        <?php $part = (int) ($fileMeta['index'] ?? 0); ?>
+                        <a class="btn btn-sm btn-outline-success" href="<?= htmlspecialchars('/gshop/index.php?route=/gshop/api/palmari/masterdata/file&part=' . $part, ENT_QUOTES, 'UTF-8') ?>">
+                            <?= htmlspecialchars((string) ($fileMeta['file'] ?? ('Parte ' . $part)), ENT_QUOTES, 'UTF-8') ?>
+                            (<?= (int) ($fileMeta['rows'] ?? 0) ?>)
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 
@@ -330,8 +369,8 @@ function hasSubmittedFilters(array $query): bool
                     <input type="text" name="moddescr" class="form-control" value="<?= htmlspecialchars($filters['moddescr'], ENT_QUOTES, 'UTF-8') ?>">
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label">Limite righe</label>
-                    <input type="number" min="1" max="999999" name="limit" class="form-control" value="<?= (int) $filters['limit'] ?>">
+                    <label class="form-label">Limite visualizzazione</label>
+                    <input type="number" min="1" max="5000" name="limit" class="form-control" value="<?= $viewLimit ?>">
                 </div>
 
                 <div class="col-md-2">
@@ -439,7 +478,7 @@ function hasSubmittedFilters(array $query): bool
             <div class="d-flex flex-wrap gap-2 mt-4">
                 <button type="submit" class="btn btn-primary">Applica filtri</button>
                 <a href="export_palmari.php" class="btn btn-outline-secondary">Reset filtri</a>
-                <button type="submit" name="export" value="1" class="btn btn-success">Crea file export CSV</button>
+                <button type="submit" name="export" value="1" class="btn btn-success">Esegui refresh masterdata</button>
             </div>
         </div>
     </form>
@@ -447,7 +486,11 @@ function hasSubmittedFilters(array $query): bool
     <div class="card shadow-sm">
         <div class="card-header bg-white d-flex justify-content-between align-items-center">
             <strong>Risultati</strong>
-            <span class="badge bg-primary">Righe: <?= count($rows) ?></span>
+            <span class="badge bg-primary">Anteprima: <?= count($rows) ?> / <?= $viewLimit ?></span>
+        </div>
+        <div class="card-body border-bottom py-2 small text-muted d-flex justify-content-between align-items-center">
+            <span>Totale modelli filtrati: <?= $totalRows ?></span>
+            <span>Righe masterdata attese: <?= $masterdataRows ?></span>
         </div>
         <div class="table-responsive">
             <table class="table table-striped table-hover table-sm mb-0">
@@ -504,6 +547,6 @@ function hasSubmittedFilters(array $query): bool
     </div>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 </body>
 </html>

@@ -77,23 +77,16 @@ $exp = $config['export'] ?? [];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GShop - Impostazioni</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>GShop — Impostazioni</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" crossorigin="anonymous">
     <style>
         body { background: #f6f8fb; }
         .card { border-radius: 12px; }
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="admin.html">GetBarcodes - GShop Settings</a>
-        <div class="d-flex gap-2">
-            <a class="btn btn-outline-light btn-sm" href="gshop_admin.html">Area GShop</a>
-            <a class="btn btn-outline-light btn-sm" href="admin.html">Dashboard</a>
-        </div>
-    </div>
-</nav>
+<?php $navActivePage = 'gshop-settings'; include __DIR__ . '/_navbar.php'; ?>
 
 <main class="container py-4">
     <div class="mb-3">
@@ -218,6 +211,6 @@ $exp = $config['export'] ?? [];
     </form>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 </body>
 </html>

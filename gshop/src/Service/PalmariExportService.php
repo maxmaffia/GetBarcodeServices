@@ -106,7 +106,7 @@ class PalmariExportService
         return $data;
     }
 
-    public function refreshMasterdata(PDO $pdo, array $filters, int $limit = 999999): array
+    public function refreshMasterdata(PDO $pdo, array $filters, ?int $limit = null): array
     {
         $limit = $this->normalizeMasterdataLimit($limit);
 
@@ -139,6 +139,15 @@ class PalmariExportService
         }
 
         return $metadata;
+    }
+
+    public function estimateMasterdataRows(PDO $pdo, array $filters, ?int $limit = null): int
+    {
+        $limit = $this->normalizeMasterdataLimit($limit);
+        $normalized = $this->normalizeFilters($filters);
+        $stmt = $this->executeQuery($pdo, $normalized, $limit);
+
+        return $this->countExpandedRowsFromStatement($stmt);
     }
 
     public function resolveMasterdataFile(): ?array
@@ -199,7 +208,7 @@ class PalmariExportService
         ];
     }
 
-    public function saveMasterdataProfile(array $filters, int $limit = 999999): array
+    public function saveMasterdataProfile(array $filters, ?int $limit = null): array
     {
         $normalized = $this->normalizeFilters($filters);
         $limit = $this->normalizeMasterdataLimit($limit);
@@ -227,7 +236,7 @@ class PalmariExportService
         $defaults = [
             'updated_at' => null,
             'filters' => $this->normalizeFilters([]),
-            'limit' => 999999,
+            'limit' => null,
             'source' => 'default',
         ];
 
@@ -249,15 +258,18 @@ class PalmariExportService
         return [
             'updated_at' => isset($data['updated_at']) ? (string) $data['updated_at'] : null,
             'filters' => $this->normalizeFilters(isset($data['filters']) && is_array($data['filters']) ? $data['filters'] : []),
-            'limit' => $this->normalizeMasterdataLimit((int) ($data['limit'] ?? 999999)),
+            'limit' => $this->normalizeMasterdataLimit(isset($data['limit']) ? (int) $data['limit'] : null),
             'source' => 'saved',
         ];
     }
 
-    public function normalizeMasterdataLimit(int $limit): int
+    public function normalizeMasterdataLimit(?int $limit): ?int
     {
+        if ($limit === null) {
+            return null;
+        }
         if ($limit < 1) {
-            return 999999;
+            return null;
         }
         if ($limit > 2000000) {
             return 2000000;
@@ -315,7 +327,7 @@ class PalmariExportService
         }
     }
 
-    private function executeQuery(PDO $pdo, array $filters, int $limit): \PDOStatement
+    private function executeQuery(PDO $pdo, array $filters, ?int $limit): \PDOStatement
     {
         $maxTaglie = $this->resolveMaxTaglie($pdo);
         $this->currentMaxTaglie = $maxTaglie;
@@ -359,14 +371,18 @@ class PalmariExportService
         }
 
         $sql .= ' ORDER BY RTRIM(m.ModArticolo) ASC, TRY_CAST(LTRIM(b.ModCorriPosTaglia) AS INT) ASC';
-        $sql .= ' OFFSET 0 ROWS FETCH NEXT :limit ROWS ONLY';
+        if ($limit !== null) {
+            $sql .= ' OFFSET 0 ROWS FETCH NEXT :limit ROWS ONLY';
+        }
 
         $stmt = $pdo->prepare($sql);
         $stmt->setAttribute(PDO::ATTR_CURSOR, PDO::CURSOR_FWDONLY);
         foreach ($params as $param => $value) {
             $stmt->bindValue($param, $value, PDO::PARAM_STR);
         }
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        if ($limit !== null) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        }
         $stmt->execute();
 
         return $stmt;
@@ -438,7 +454,7 @@ class PalmariExportService
 
         fwrite($fp, "\xEF\xBB\xBF");
         $headers = [
-            'Barcode', 'Codice', 'Descrizione', 'Taglia',
+            'Barcode', 'Codice', 'Descrizione', 'Taglia', 'PosTaglia',
             'PrezzoAcquisto', 'PrezzoVendita1', 'PrezzoVendita2', 'PrezzoVendita3',
             'PrezzoVendita4', 'PrezzoVendita5', 'Stagione', 'Brand', 'Categoria', 'Tipologia',
             'Disciplina', 'Materiale', 'Reparto', 'Fornitore'
@@ -483,7 +499,7 @@ class PalmariExportService
         $chunkSize = $chunkSize > 0 ? $chunkSize : 50000;
         $base = pathinfo($baseFilename, PATHINFO_FILENAME);
         $headers = [
-            'Barcode', 'Codice', 'Descrizione', 'Taglia',
+            'Barcode', 'Codice', 'Descrizione', 'Taglia', 'PosTaglia',
             'PrezzoAcquisto', 'PrezzoVendita1', 'PrezzoVendita2', 'PrezzoVendita3',
             'PrezzoVendita4', 'PrezzoVendita5', 'Stagione', 'Brand', 'Categoria', 'Tipologia',
             'Disciplina', 'Materiale', 'Reparto', 'Fornitore'
@@ -564,6 +580,31 @@ class PalmariExportService
         ];
     }
 
+    private function countExpandedRowsFromStatement(\PDOStatement $stmt): int
+    {
+        $count = 0;
+
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $row = $this->toUtf8Row($row);
+
+            if ($this->shouldExpandRootBarcode($row)) {
+                $numTaglieRaw = (string) ($row['NumTaglieRaw'] ?? '');
+                for ($pos = 1; $pos <= $this->currentMaxTaglie; $pos++) {
+                    $expanded = $this->buildExpandedBarcodeRow($row, $numTaglieRaw, $pos);
+                    if ($this->isEmptyTaglia($expanded)) {
+                        continue;
+                    }
+                    $count++;
+                }
+                continue;
+            }
+
+            $count++;
+        }
+
+        return $count;
+    }
+
     private function isEmptyTaglia(array $row): bool
     {
         return trim((string) ($row['Taglia'] ?? '')) === '';
@@ -587,6 +628,7 @@ class PalmariExportService
         $expanded = $row;
         $expanded['Barcode'] = $ean12 . $checksum;
         $expanded['Taglia'] = $this->extractTagliaByPosition($numTaglieRaw, $position);
+        $expanded['PosTaglia'] = (string) $position;
 
         return $expanded;
     }
@@ -629,6 +671,7 @@ class PalmariExportService
             SELECT
                 b.ModCorriBarcode AS Barcode,
                 NULLIF(LTRIM(RTRIM(b.ModCorriPosTaglia)), '') AS PosTagliaRaw,
+                NULLIF(LTRIM(RTRIM(b.ModCorriPosTaglia)), '') AS PosTaglia,
                 RTRIM(m.ModArticolo) AS Codice,
                 m.ModDescr AS Descrizione,
                 CASE
@@ -651,8 +694,8 @@ class PalmariExportService
                 p.PelDescr AS Materiale,
                 r.RepDescr AS Reparto,
                 f.ForDescr AS Fornitore
-            FROM ModCorris_Barcode b
-            INNER JOIN modelli m ON RTRIM(b.ModCorriArticolo) = RTRIM(m.ModArticolo)
+            FROM modelli m
+            LEFT JOIN ModCorris_Barcode b ON RTRIM(b.ModCorriArticolo) = RTRIM(m.ModArticolo)
             LEFT JOIN numerazioni n ON m.ModNumer = n.NumCode
             LEFT JOIN categorie c ON m.ModCat = c.CatCode
             LEFT JOIN tipi t ON m.ModAltezza = t.TipoCode

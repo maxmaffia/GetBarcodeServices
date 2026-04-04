@@ -69,7 +69,7 @@ class PalmariExportController
 
         $filters = isset($body['filters']) && is_array($body['filters']) ? $body['filters'] : [];
         $hasLimit = array_key_exists('limit', $body);
-        $limit = $hasLimit ? (int) $body['limit'] : 999999;
+        $limit = $hasLimit ? (int) $body['limit'] : null;
         $filtersSource = 'request';
         $profileSaved = false;
 
@@ -77,12 +77,12 @@ class PalmariExportController
             $profile = $this->service->getMasterdataProfile();
             $filters = $profile['filters'];
             if (!$hasLimit) {
-                $limit = (int) $profile['limit'];
+                $limit = $profile['limit'];
             }
             $filtersSource = (string) ($profile['source'] ?? 'default');
         } else {
             try {
-                $this->service->saveMasterdataProfile($filters, $limit);
+                $this->service->saveMasterdataProfile($filters, $hasLimit ? $limit : null);
                 $profileSaved = true;
             } catch (\Throwable $e) {
                 Response::json(['error' => 'Errore salvataggio profilo filtri', 'details' => $e->getMessage()], 500);
@@ -135,7 +135,7 @@ class PalmariExportController
         }
 
         $filters = isset($body['filters']) && is_array($body['filters']) ? $body['filters'] : [];
-        $limit = (int) ($body['limit'] ?? 999999);
+        $limit = array_key_exists('limit', $body) ? (int) $body['limit'] : null;
 
         try {
             $profile = $this->service->saveMasterdataProfile($filters, $limit);

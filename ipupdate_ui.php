@@ -196,8 +196,10 @@ $defaultIp = $localIPs[0] ?? '';
         .dropdown-item:active { background-color: #ede9fe; color: #4f46e5; }
     </style>
 </head>
-<body class="d-flex align-items-center justify-content-center py-5 px-3">
+<body>
+<?php $navActivePage = 'ipconfig'; include __DIR__ . '/_navbar.php'; ?>
 
+<div class="d-flex justify-content-center py-4 px-3">
 <div style="width: 100%; max-width: 520px;">
 
     <div class="main-card">
@@ -329,7 +331,7 @@ $defaultIp = $localIPs[0] ?? '';
         <!-- ── Footer ── -->
         <div class="bg-light text-center py-3 px-3 border-top">
             <div class="mb-2">
-                <a href="admin.html" class="btn btn-sm btn-outline-primary">
+                <a href="admin.php" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-house me-1"></i>Torna al pannello principale
                 </a>
             </div>
@@ -341,6 +343,8 @@ $defaultIp = $localIPs[0] ?? '';
 
     </div><!-- /main-card -->
 </div>
+
+</div><!-- /centering wrapper -->
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         crossorigin="anonymous"></script>

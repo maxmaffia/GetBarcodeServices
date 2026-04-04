@@ -176,7 +176,7 @@ $breadcrumb = getBreadcrumb($requestPath);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Navigazione Barcodes</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
         body {
@@ -188,10 +188,6 @@ $breadcrumb = getBreadcrumb($requestPath);
         main {
             flex: 1;
             padding: 2rem 0;
-        }
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 1.5rem;
         }
         .breadcrumb {
             background: white;
@@ -310,25 +306,7 @@ $breadcrumb = getBreadcrumb($requestPath);
 </head>
 <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <span class="navbar-brand">
-                <i class="bi bi-file-earmark-text me-2"></i>Barcodes
-            </span>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="admin.html">
-                            <i class="bi bi-house me-1"></i>Pannello principale
-                        </a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
+<?php $navActivePage = 'barcodes'; include __DIR__ . '/_navbar.php'; ?>
 
     <!-- Main Content -->
     <main>
@@ -480,7 +458,7 @@ $breadcrumb = getBreadcrumb($requestPath);
 
                 <!-- Footer -->
                 <div class="text-center mt-4">
-                    <a href="admin.html" class="btn btn-outline-primary">
+                    <a href="admin.php" class="btn btn-outline-primary">
                         <i class="bi bi-house me-1"></i>Torna al pannello principale
                     </a>
                 </div>
@@ -489,6 +467,6 @@ $breadcrumb = getBreadcrumb($requestPath);
     </main>
 
     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
 </body>
 </html>
