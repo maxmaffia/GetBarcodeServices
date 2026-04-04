@@ -219,18 +219,32 @@ class PalmariExportController
 
         echo '[';
         $first = true;
+        $skippedRows = 0;
+        $csvLine = 1; // Header line.
 
         while (($row = fgetcsv($fp, 0, ';', '"', '\\')) !== false) {
+            $csvLine++;
             $assoc = [];
             foreach ($headers as $index => $header) {
                 $assoc[$header] = $row[$index] ?? '';
             }
 
-            $json = json_encode($assoc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $json = json_encode($assoc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+            $jsonError = $json === false ? json_last_error_msg() : null;
             if ($json === false) {
-                fclose($fp);
-                Response::json(['error' => 'Errore conversione JSON'], 500);
-                return;
+                $assoc = $this->sanitizeUtf8Array($assoc);
+                $json = json_encode($assoc, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+                if ($json === false) {
+                    $skippedRows++;
+                    $this->logMasterdataJsonSkip(
+                        $absolutePath,
+                        $csvLine,
+                        (string) $jsonError,
+                        json_last_error_msg(),
+                        $assoc
+                    );
+                    continue;
+                }
             }
 
             if (!$first) {
@@ -242,7 +256,49 @@ class PalmariExportController
         }
 
         echo ']';
+        if ($skippedRows > 0) {
+            header('X-Masterdata-Skipped-Rows: ' . $skippedRows);
+        }
         fclose($fp);
+    }
+
+    private function logMasterdataJsonSkip(string $csvPath, int $line, string $firstError, string $secondError, array $row): void
+    {
+        $logPath = dirname($csvPath) . DIRECTORY_SEPARATOR . 'masterdata_json_errors.log';
+
+        $entry = [
+            'timestamp' => date('c'),
+            'csv_file' => basename($csvPath),
+            'csv_line' => $line,
+            'first_encode_error' => $firstError,
+            'second_encode_error' => $secondError,
+            // Snapshot ridotto per facilitare debug senza appesantire il log.
+            'row_preview' => mb_substr(json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) ?: '', 0, 500),
+        ];
+
+        $lineText = json_encode($entry, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{"error":"log_encode_failed"}';
+        @file_put_contents($logPath, $lineText . PHP_EOL, FILE_APPEND | LOCK_EX);
+    }
+
+    private function sanitizeUtf8Array(array $input): array
+    {
+        $out = [];
+
+        foreach ($input as $key => $value) {
+            if (!is_string($value)) {
+                $out[$key] = $value;
+                continue;
+            }
+
+            if (mb_check_encoding($value, 'UTF-8')) {
+                $out[$key] = $value;
+                continue;
+            }
+
+            $out[$key] = mb_convert_encoding($value, 'UTF-8', 'Windows-1252,ISO-8859-1,UTF-8');
+        }
+
+        return $out;
     }
 
     private function isEmptyFiltersPayload(array $filters): bool
